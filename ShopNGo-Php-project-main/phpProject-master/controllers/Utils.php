@@ -1,0 +1,212 @@
+<?php
+
+    require_once('../models/User.php');
+    require_once("../models/Cart.php");
+    require_once("../models/CartItem.php");
+    require_once("../models/Product.php");
+    require_once("../models/Order.php");
+    require_once("../models/OrderItem.php");
+    require_once("../models/Address.php");
+    require_once("../models/Category.php");
+
+    function registerUser($username, $password, $email, $first_name, $last_name) {
+
+        $user = new User();
+        $user->username = $username;
+        $user->password = $password;
+        $user->email = $email;
+        $user->first_name = $first_name;
+        $user->last_name = $last_name;
+
+        return $user->create();
+    }
+
+    function loginUser($email, $password) {
+        
+        $user = new User();
+        $user->email = $email;
+        $user->password = $password;
+
+        return $user->login();
+    }
+
+    function getCartIdByUserId() {
+        $cart = new Cart();
+        $cart->user_id = $_SESSION['userId'];
+        
+        return $cart->getCartIdByUserId();
+    }
+
+    function placeOrder($shipping_address) {
+        $order = new Order();
+        $order->shipping_address = $shipping_address;
+        $order->user_id = $_SESSION['userId'];
+
+        $order->placeOrder();
+    }
+
+    function populateCart() {
+        
+        $cart = new Cart();
+        $cart->cartItemObj->cart_id = getCartIdByUserId();
+        
+        $cartItems = $cart->cartItemObj->getCartItemsById();
+        $cartArr = [];
+        foreach ($cartItems as $cartItem) {
+            $cartArr[$cartItem['product_id']] = $cartItem['quantity'];
+        }
+
+        $_SESSION['cart'] = $cartArr;
+    }
+
+    function getCartItems($user_id) {
+        $cartItem = new CartItem();
+        $query = "SELECT * FROM CartItems WHERE user_id = ?";
+        $stmt = $cartItem->conn->prepare($query);
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+    
+        $items = [];
+        while ($row = $result->fetch_assoc()) {
+            $items[] = $row;
+        }
+    
+        return $items;
+    }
+
+    function getAllProducts() {
+        $product = new Product();
+        $products = $product->read();
+    
+        if($products){
+            return $products;
+        }else {
+            return [];
+        }
+    }
+
+    function getProductById($product_id) {
+        $product = new Product();
+        $product->product_id = $product_id;
+
+        return $product->getProductById();
+    }
+
+    function getProducts($productIds) {
+        $product = new Product();
+        $product->productIds = $productIds;
+
+        return $product->getProducts();
+    }
+
+    function updateCart($cartItems, $isdelete) {
+        $cart = new Cart();
+        $cart->cartItems = $cartItems;
+        $cart->isdelete = $isdelete;
+
+        $cart->updateCart();
+    }
+
+    function set_Cookie($name, $value, $expiry = 86400, $path = "/", $domain = "", $secure = false, $httponly = false) {
+        setcookie($name, $value, time() + $expiry, $path, $domain, $secure, $httponly);
+    }
+
+    function get_Cookie($name) {
+        return isset($_COOKIE[$name]) ? $_COOKIE[$name] : null;
+    }
+
+    function getOrdersByUserId() {
+        $order = new Order();
+        $order->user_id = $_SESSION['userId'];
+
+        return $order->getOrdersByUserId();
+    }
+    function getOrderById($order_id) {
+        $order = new Order();
+        $order->order_id = $order_id;
+
+        return $order->getOrderById();
+    }
+
+    function getOrderItemsByOrderId($orderItem_id) {
+        $orderItem = new OrderItem();
+        $orderItem->order_id = $orderItem_id;
+
+        return $orderItem->getOrderItemsByOrderId();
+    }
+
+    function getAddressByUserId() {
+        $address = new Address();
+        $address->user_id = $_SESSION['userId'];
+
+        return $address->getAddressByUserId();
+    }
+
+    function getUserByUserId($userId) {
+        try {
+            $db = getDbConnection();
+            $stmt = $db->prepare("SELECT first_name, role FROM users WHERE user_id = :user_id");
+            $stmt->execute([':user_id' => $userId]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            return null;
+        }
+    }
+
+    function getPhoneByUserId() {
+        $user = new User();
+        $user->user_id = $_SESSION['userId'];
+
+        return $user->getPhoneById();
+    }
+
+
+    function getDbConnection() {
+        $host = 'localhost';
+        $dbname = 'grocerystore';
+        $username = 'root';
+        $password = ''; // Default XAMPP password is empty
+    
+        try {
+            $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            return $pdo;
+        } catch (PDOException $e) {
+            die("Database connection failed: " . $e->getMessage());
+        }
+    }
+
+    function addProduct($name, $description, $price, $stock_quantity, $category_id, $image_url) {
+        try {
+            $db = getDbConnection(); // Assumes a function to get PDO connection
+            $stmt = $db->prepare("
+                INSERT INTO products (name, description, price, stock_quantity, category_id, image_url, created_at, updated_at)
+                VALUES (:name, :description, :price, :stock_quantity, :category_id, :image_url, NOW(), NOW())
+            ");
+            $stmt->execute([
+                ':name' => $name,
+                ':description' => $description,
+                ':price' => $price,
+                ':stock_quantity' => $stock_quantity,
+                ':category_id' => $category_id,
+                ':image_url' => $image_url
+            ]);
+            return true;
+        } catch (PDOException $e) {
+            return "Database error: " . $e->getMessage();
+        }
+    }
+
+
+    function getCategories() {
+        try {
+            $db = getDbConnection();
+            $stmt = $db->query("SELECT category_id, name FROM categories ORDER BY name");
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            return [];
+        }
+    }
+
+?>
